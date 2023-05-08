@@ -1,0 +1,353 @@
+---
+title: "Analysis of a Preliminary System Developed for Managing 3D Printer Waste"
+author: "Sophie Allen"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r message=FALSE, warning=FALSE}
+setwd("C:/Users/Sophie/Downloads/Capstone")
+library(tidyverse)
+library(knitr)
+```
+
+## Abstract
+3D printing is an important tool in educational institutions with a variety of uses and benefits. The most commonly used material in 3D prints is polylactic acid (PLA), a thermoplastic polymer. 3D printing by nature produces a lot of waste material. As plastic waste production continues to rise with severe environmental consequences, the search for methods for recycling plastics becomes more and more pressing. In the last few years, both commercial and open-source systems have emerged for specifically recycling 3D printer plastic. Many of the commercial systems have not yet been perfected and are too expensive for most individuals, hobbyists, and even small university programs. The open-source solutions are complicated, time consuming, and still require a substantial financial investment. In this study, we use ideas from open-source designs to create a preliminary spooling system for turning PLA pellets into spooled filament. The automated method costs less than \$ 100, compared to the leading commercial recycling spooling system created by Filabot, which costs \$ 3,032. The automated spooling system we created produces filament with a standard deviation in diameter of 0.078 mm, whereas manually spooling the filament gives a standard deviation in diameter of 0.49 mm. This automated system produced filament with diameter consistency that was significantly better than manual spooling, and provides important groundwork for the construction of future models.  
+
+## **Introduction**
+The Warren Wilson College Creative Technologies Lab has two 3D printers that use polylactic acid. By nature, 3D printing produces a lot of waste. In order to better align with the college's sustainability values, the lab wanted a way to recycle some of the waste material. In 2014, the lab bought an extruder (Figure 1) from a company called [Filabot](https://www.filabot.com/collections/filabot-core/products/filabot-original-ex2) .
+
+*Figure 1: Extruder purchased from Filabot. Designed to melt plastic and extrude it in a thread-like form to be used again in the 3D printer.*\
+![Extruder](C:\Users\Sophie\Downloads\Capstone\extruderpic.jpg){width=30%}
+
+The concept of recycling 3D printer filament was rather new at the time, and companies did not sell any other products to work with the extruder. However, when the lab began to use the extruder, they quickly realized it was ineffective without a way to spool the filament (Figure 2)\
+
+*Figure 2: Blobs produced by the extruder without a spooler*\
+![Figure 2](C:\Users\Sophie\Downloads\Capstone\blobs1.jpg){width=50%}
+
+Creating a method for spooling the filament is difficult because it requires extreme precision. Filament produced by the system must be within a 0.1 mm tolerance range of the ideal diameter in order to be compatible with the 3D printer. 
+The goal of this study was to design a preliminary, automated spooling system to work with the extruder. The system would regulate the diameter of the produced filament by controlling the speed of the spool winding the filament. The ideal filament diameter for this study was 1.75mm with a tolerance of +/- 0.1 mm.
+
+**Objectives**\
+Our first objective was to create a spooler with a diameter sensor feedback system to spool filament coming out of the extruder. To do this we would have to:\ 
+
+* 3D print gears, mounts, and other components
+* wire the sensor, motor, and fans
+* write the software to control it
+
+The second was to evaluate the feedback system by comparing it to spooling the filament by hand. The more successful system would produce filament with a more consistent diameter.\
+
+**Objective 1**\
+We were able to construct an automated spooling system (Figure 3) and successfully complete our first objective. A Raspberry Pi computer controlled the system.\
+
+*Figure 3: Automated spooling system. Gray boxes label steps the filament takes before reaching the spool.*\
+![Figure3](C:\Users\Sophie\Downloads\Capstone\whole system.jpg)
+\
+Raspberry Pi Code:\
+This code was used to control the speed of the motor turning the spool. It was written in Python and run from the Raspberry Pi.\
+The program inputs the diameter value read by the sensor. There is a global variable for the ideal diameter that the user can change before running the program. There are also global variables for the user to set the tolerance ranges. \
+The program uses the sensor reading of the diameter to adjust the amount of voltage going to the motor. If the sensor diameter value is above the specified range, the voltage is increased, increasing the RPM of the spool. This stretches the filament, making it thinner by the time it reaches the spool. If the sensor reading is below the desired range, the voltage decreases. This gives the filament more time to cool making it thicker by the time it reaches the spool. The amount that the voltage is adjusted depends on how much distance there is between the ideal diameter and the diameter recorded by the sensor. A greater distance from the ideal diameter results in a greater adjustment to the voltage.
+
+```{r eval=FALSE}
+import gpiozero
+import time
+from gpiozero import MCP3008
+from time import sleep
+#Setup pins
+Backward = gpiozero.OutputDevice(23) # On/Off output
+Forward = gpiozero.OutputDevice(18) #On/Off output
+SpeedPWM = gpiozero.PWMOutputDevice(24) # set up PWM pin.
+speedFlag = 260
+#diameter range
+DIAMETER_IDEAL = 1.75
+TOLERANCE1 = 0.05
+TOLERANCE2 = 0.10
+TOLERANCE3 = 0.15
+TOLERANCE4 = 0.20
+
+#file name
+FILENAME = "{day1testing5_1.csv}"
+#variables to change
+NUMREADINGS = 5
+SLEEPTIME = 1
+TEMPERATURE = 200
+
+#write initial conditions to file
+file1 = open(FILENAME,"a")
+print(TEMPERATURE,file = file1)
+print(NUMREADINGS,file = file1)
+print(SLEEPTIME*10,file = file1)
+timepassed = SLEEPTIME
+
+while True:
+    #speed
+    SpeedPWM.value = speedFlag/1000
+    #open file
+    file1 = open(FILENAME,"a")
+    #create empty list
+    dimlist = []
+    diameter = (MCP3008(0))
+    #get diameter value
+    fulldiameter = diameter.value *5
+    #add diameters to list
+    for i in range(1,(NUMREADINGS+1)):
+        #dimlist.append(fulldiameter)
+        dimlist.append(fulldiameter)
+        sleep(SLEEPTIME)
+    #meanoflist
+    dimmean = (sum(dimlist))/NUMREADINGS
+
+    #if speedFlag can still be adjusted
+    if speedFlag < 1000 and speedFlag > 50:
+        if dimmean >= DIAMETER_IDEAL + TOLERANCE4:
+            speedFlag += 5
+        elif dimmean >= DIAMETER_IDEAL + TOLERANCE3:
+            speedFlag += 2
+        elif dimmean >= DIAMETER_IDEAL + TOLERANCE2:
+            speedFlag += 1
+        elif dimmean >= DIAMETER_IDEAL + TOLERANCE1:
+            speedFlag += 0.5
+        elif dimmean <= DIAMETER_IDEAL - TOLERANCE4:
+            speedFlag -= 5
+        elif dimmean <= DIAMETER_IDEAL - TOLERANCE3:
+            speedFlag -= 2
+        elif dimmean <= DIAMETER_IDEAL - TOLERANCE2:
+            speedFlag -= 1
+        elif dimmean <= DIAMETER_IDEAL - TOLERANCE1:
+            speedFlag -= 0.5
+    #if speed is max
+    elif speedFlag >= 995:
+        print("Max Speed Reached")
+    #if speed is min
+    elif speedFlag <= 5:
+        print("Minimum Speed Reached")
+    #add time
+    timepassed += (SLEEPTIME*10)
+    #print mean diameter
+    print("{:.2f}".format(dimmean))
+    #print speed flag
+    print("{:.2f}".format(speedFlag))
+    #write diameter and speed to file
+    print("{:.2f}".format(dimmean),"{:.2f}".format(speedFlag),"{:.2f}".format(timepassed),file = file1)
+    #close file
+    file1.close()
+```
+
+Next, we evaluated the system we created.\
+
+**Objective 2**\
+To evaluate the automated spooling system, we compared it to spooling the filament manually. For both systems, the mechanism that regulates the diameter of the filament is the speed of the spool that is collecting filament from the extruder. The methods vary in the way the speed of the spool is controlled.\
+Automated Method: The spool is spun by a motor. The speed of the motor responds to the diameter of the filament. The diameter of the filament is read by a sensor, input to a computer program, and then used by the program to adjust the voltage going to the motor which corresponds to the speed.\
+Manual Method: The spool is spun by hand. The person spooling attempts to maintain a consistent speed while rotating the spool and winding the extruded filament onto it.\
+
+**Null Hypothesis**:\
+Both spooling methods will produce the same proportion of diameter readings within the desired range.
+
+**Alternative Hypothesis**
+The automated spooling method will produce a greater proportion of diameter readings within the desired range than the manual spooling method. 
+
+
+## Data Manipulation
+Data was collected on a Raspberry Pi computer and written to a local file. The file contained three columns: the elapsed time (in seconds) at the time of the reading, the diameter of the filament in mm, and the amount of voltage powering the motor.  
+
+import data
+```{r}
+manual<-read.csv("manualrunwsensor.csv")
+automated<-read.csv("C:/Users/Sophie/Downloads/Capstone/readings50sld01.csv")
+```
+head dataframes
+```{r}
+head(automated)
+head(manual)
+```
+rename columns
+```{r}
+colnames(automated) <- c("Diameter","Speed", "Time")
+#automated <- automated %>% rename(Diameter = X200, Speed = X, Time = X.1)
+manual <- manual %>% rename(Diameter.m = X2.08, Time = X1)
+```
+
+When the program was run for the automated method, it first prompted the user to input the temperature of the extruder, how many readings should be taken before taking the mean, and how much time the program should pause between taking readings. We used 50 readings before taking the mean and a 1 second pause between each reading. These values were added to the diameter column in the file.\
+
+remove non-diameter values
+```{r}
+automated<-filter(automated, Diameter >= 1.01, Diameter<=9.00)
+```
+
+
+The ideal filament diameter is between 1.65 mm and 1.85 mm. A fourth column was added to the dataframe that contained categorical variables that indicated whether each reading was within range or out of range. 
+```{r}
+range50<- c()
+for(i in 1:nrow(automated)){
+  if(automated[i,1] >= 1.65 & automated[i,1] <= 1.85){
+    range50[i]<- "In Range"
+  }else{
+    range50[i]<- "Out of Range"
+  }
+}
+automated$Range <- range50
+```
+
+This column was also added to the manual dataset. 
+```{r}
+rangem<- c()
+for(i in 1:nrow(manual)){
+  if(manual[i,1] >= 1.65 & manual[i,1] <= 1.85){
+    rangem[i]<- "In Range"
+  }else{
+    rangem[i]<- "Out of Range"
+  }
+}
+manual$Range <- rangem
+```
+
+#### Rotations Per Minute
+The Raspberry Pi controlled the speed of the motor by changing the voltage it was supplied. The motor speed in the program was a variable that was between 1 and 1000. 1000 indicated the maximum voltage should be supplied to the motor (12V). To be slowed, the motor speed variable could be set to a certain percentage of maximum power. For example, if the Raspberry Pi set the speed variable to 500, the motor would run at 50% of its maximum voltage, or 6V.\
+At the time of each reading, the speed value between 1 and 1000 was written the the document in the third column. To make this variable easier to understand, we estimated the RPM of the spooler based on the speed value recorded by the Raspberry Pi. The motor was run for one minute at 60% of the maximum voltage. The number of rotations of the outer edge of the spool was measured and recorded. This process was repeated with the motor instead running at 30% of the maximum voltage. We used these two values to write a function to predict the RPM of the spool based on a given voltage.\
+
+prediction from RPM measurements:
+```{r warning=FALSE}
+#30% and 60% of the maximum speed
+speed <- c(300, 600)
+#The corresponding RPMs measured
+RPM <- c(2.894, 5.186)
+#Corresponding linear model
+lm(RPM ~ speed)
+```
+A fourth column was then added to the automated dataset containing the RPM values based on the existing speed column. This was not applicable to the manual dataset because the RPM of the spool was not controlled by the voltage from the motor. 
+```{r}
+automated <- automated %>% mutate(RPM = (0.00764*Speed) + 0.60200 )
+```
+
+
+## **Visualizations**
+
+This section uses scatterplots, histograms, and density plots to compare the diameter readings between the two methods.
+
+The following scatterplots show the time in seconds vs the diameter in mm for each of the spooling methods. The red lines shows the ideal diameter, 1.75 mm. The pink lines show the 
++/- 0.1 mm tolerance range, 1.65 mm and 1.85 mm. The lighter points represent readings that are in the desired range, and the darker points represent readings that are outside of the desired range.
+
+### Automated Method
+```{r}
+ggplot(automated, aes(x = Time, y = Diameter, col = Range)) + geom_point() + scale_y_continuous(breaks=c(0, 0.5, 1.0, 1.5, 1.75, 2.0, 2.5,3.0), limits = c(0,3.1), expand = c(0,0)) + scale_x_continuous(breaks=seq(0, 350, 50), expand = c(0,0), limits = c(0,351)) + scale_color_manual(values = c("In Range" = alpha("cyan3",0.9),"Out of Range"=alpha("blue4",0.6))) + labs(title = "Automated Spooling: Time vs Diameter", x = "Time (seconds)", y = "Diameter (mm)") + theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5)) + theme(axis.line = element_line(size = 0.5, colour = "black")) + theme(panel.border = element_rect(colour = "black", fill=NA, size=.5))+ geom_hline(yintercept=1.75, col = "red")+ geom_hline(yintercept=1.85, col = "pink")+ geom_hline(yintercept=1.65, col = "pink") + expand_limits(y = 0:3)
+```
+
+This plot of time vs diameter for the automated method shows consistency throughout the trial, as well as the majority of points within the desired range.  
+
+### Manual Method
+```{r}
+ggplot(manual, aes(x = Time, y = Diameter.m, col = Range)) + geom_point() + scale_y_continuous(breaks=c(0, 0.5, 1.0, 1.5, 1.75, 2.0, 2.5,3.0), expand = c(0,0), limits = c(0,3.1)) + scale_x_continuous(breaks = seq(0,850, 100), expand = c(0,0), limits = c(0,870)) +scale_color_manual(values = c("In Range" = alpha("green3",0.9),"Out of Range"=alpha("darkgreen",0.6))) + labs(title = "Manual Spooling: Time vs Diameter", x = "Time (seconds)", y = "Diameter (mm)") + theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))+ theme(axis.line = element_line(size = 0.5, colour = "black")) + theme(panel.border = element_rect(colour = "black", fill=NA, size=.5))+geom_hline(yintercept=1.75, col = "red")+geom_hline(yintercept=1.85, col = "pink")+geom_hline(yintercept=1.65, col = "pink")+ expand_limits(y = 0:3)
+```
+
+This plot of time vs diameter for the manual method is much less consistant than the same plot for the automated method. There is much more variation in the diameter, and many more points outside of the desired range.
+
+## Histograms
+
+The following histograms show the distribution of the diameter of the filament for each method. 
+
+### Automated Method
+
+```{r message=FALSE, warning=FALSE}
+ggplot(automated, aes(x = Diameter)) + geom_histogram(color = alpha("blue4",0.8), fill = "deepskyblue3", binwidth = .03) + theme_minimal() + geom_vline (xintercept=1.75, col = "red", size = 1) + geom_vline (xintercept=1.65, col = "pink", size = 1)+ geom_vline (xintercept=1.85, col = "pink", size = 1)+ theme(axis.line = element_line(size = 0.5, colour = "black")) + theme(panel.border = element_rect(colour = "black", fill=NA, size=.5))+ scale_y_continuous(expand = c(0, 0), limits = c(0, NA))+ scale_x_continuous(expand = c(0,0), limits = c(0, 3.1), breaks = seq(0,3,0.25))+ expand_limits(x = 0:3)+ expand_limits(y = 0:50)+labs(y = "Count", x = "Diameter (mm)", title = "Automated Spooling: Histogram of Diameter")+ theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+```
+
+This histogram of the diameter of the filament using the automated spooling method shows again that most of the readings are in range, and the average is around the desired diameter of 1.75 mm. There is a small range in diameter, and the diameter is precise and accurate.
+
+### Manual Method
+
+```{r message=FALSE, warning=FALSE}
+ggplot(manual, aes(x = Diameter.m)) + 
+  geom_histogram(color = alpha("darkgreen",0.8), fill = "chartreuse3", binwidth = .1) + 
+  theme_minimal() + geom_vline (xintercept=1.75, col = "red", size = 1) + geom_vline (xintercept=1.65, col = "pink", size = 1)+ geom_vline (xintercept=1.85, col = "pink", size = 1)+ theme(axis.line = element_line(size = 0.5, colour = "black")) + theme(panel.border = element_rect(colour = "black", fill=NA, size=.5))+ scale_y_continuous(expand = c(0, 0), limits = c(0, NA))+ scale_x_continuous(expand = c(0,0), limits = c(0, 3.1), breaks = seq(0,3,0.25))+ expand_limits(x = 0:3)+ expand_limits(y = 0:105)+labs(y = "Count", x = "Diameter (mm)", title = "Manual Spooling: Histogram of Diameter")+ theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+```
+
+This histogram of the diameter of the filament using the manual spooling method shows a wider distribution with less of the diameter readings within the desired range. The values are not centered around the desired diameter value (1.75 mm), and there is little accuracy or precision. 
+
+## Density Plots
+
+The following density plots again compare the diameter of the filament between the two methods. This is useful because the sample size for the automated method is much smaller than the sample size for the manual method. 
+
+### Automated Method
+
+```{r}
+ggplot(automated, aes(x = Diameter)) + 
+  geom_density(color = "deepskyblue3", fill = "deepskyblue3") + 
+  theme_minimal() + geom_vline (xintercept=1.75, col = "red")+ geom_vline (xintercept=1.65, col = "pink")+ geom_vline (xintercept=1.85, col = "pink")+ theme(axis.line = element_line(size = 0.5, colour = "black")) + scale_y_continuous(expand = c(0, 0), limits = c(0, NA))+ scale_x_continuous(expand = c(0, 0), limits = c(0, 3.1), breaks = seq(0,3,0.25))+ theme(panel.border = element_rect(colour = "black", fill=NA, size=.5))+ expand_limits(x = 0:3)+ expand_limits(y = 0:5)+labs(y = "Density",x = "Diameter (mm)", title = "Automated Spooling: Diameter Density Plot")+ theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+```
+
+### Manual Method
+```{r}
+ggplot(manual, aes(x = Diameter.m)) + 
+  geom_density(color = "chartreuse3", fill = "chartreuse3") + 
+  theme_minimal()+ geom_vline (xintercept=1.75, col = "red")+ geom_vline (xintercept=1.65, col = "pink")+ geom_vline (xintercept=1.85, col = "pink")+ theme(axis.line = element_line(size = 0.5, colour = "black")) + theme(panel.border = element_rect(colour = "black", fill=NA, size=.5))+ scale_y_continuous(expand = c(0, 0), limits = c(0, NA))+ scale_x_continuous(expand = c(0,0), limits = c(0, 3.1), breaks = seq(0,3,0.25))+labs(y = "Density",x = "Diameter (mm)", title = "Manual Spooling: Diameter Density Plot")+ theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5)) +expand_limits(y = 0:5)
+```
+
+These plots again show what was seen in the histograms. More accuracy, more precision, and less variation in the automated method than the manual method. 
+
+## RPM Data
+
+The automated spooling method is the only method included in the visualizations for this section. This is due to the inability to measure the RPM of the spool using the function during manual spooling.
+
+```{r}
+ggplot(automated, aes(x = Time, y = RPM)) + geom_point(col = "cornflowerblue") + theme_minimal() + labs(title = "Automated Spooling: Time vs RPM", x = "Time (s)", y = "RPM") + theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))+ theme(axis.line = element_line(size = 0.5, colour = "black")) + theme(panel.border = element_rect(colour = "black", fill=NA, size=.5))
+```
+
+This scatterplot shows us how the RPM changes over time. The initial speed is set at around 4 RPM, and the system then calibrates to accommodate the filament diameter as time progresses.\
+We would expect the RPM to decrease slowly at a constant rate over time to accommodate the increasing diameter of the spool as more filament is added. The variability in this graph is likely due to uneven spooling. The automated spooling system did not included a mechanism to spool the filament evenly across the spool, which resulted in some areas of the spool having more material than others. Thus, the diameter of the spool was not consistent in all areas, which would lead to the motor speed needing to be adjusted frequently.\
+
+
+## **Analysis**
+
+### Standard Deviations and Percent In Range
+
+The following analysis compares the standard deviations in the diameter of the filaments as well as the percent of the diameter readings withing the desired range between the automated method and the manual method. 
+
+**Automated Method**
+```{r}
+sdautomated<-sd(automated$Diameter)
+perc.automated<-((length(which(automated$Range == "In Range")))/nrow(automated))*100
+```
+
+**Manual Method**
+```{r}
+sdmanual<-sd(manual$Diameter.m)
+perc.manual<-((length(which(manual$Range == "In Range")))/nrow(manual))*100
+```
+
+The following table summarizes these results.
+
+```{r}
+method.names<- c("Automated", "Manual")
+method.sd <- c(sdautomated, sdmanual)
+method.perc <- c(perc.automated, perc.manual)
+table <- data.frame(method.names, method.sd, method.perc)
+names(table) <- c("Method", "Standard Deviation", "Percent In Range")
+kable(table, caption = "Table comparing standard deviations and percent of readings in range between methods")
+```
+
+### Proportion Test
+
+A proportion test was used to determine if the null hypothesis could be rejected.\
+The number of readings within the desired range out of the total number readings was compared between the methods. 
+
+```{r}
+length(which(manual$Range == "In Range"))
+length(which(automated$Range == "In Range"))
+prop.test(c(173,271), c(nrow(manual),nrow(automated)))
+```
+
+The proportion test produced a p-values of p < 2.2e-16 which is significant at the 0.001 level. 
+
+## **Conclusions**
+
+The p-value obtained from a proportion test (p < 2.2e-16) provides sufficient evidence to reject the null hypothesis and accept the alternative hypothesis. 
+Based on these findings, we can conclude that the automated method produces significantly more filament that is within the desired diameter range than the manual method.\
+This data provides strong evidence of the successes of the automated spooling system. These initial trials of the automated spooling system show that the system is a promising starting place for future designs for a spooling system. Repeating these trials multiple times for each of these methods will allow us to be more confident in our findings. \
+\
+
+
+
+
+
+
